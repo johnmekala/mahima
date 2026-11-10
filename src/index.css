@@ -1,0 +1,150 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ivory: #F8F3EE;
+  --color-ivory-50: #FDFAF7;
+  --color-ivory-100: #F8F3EE;
+  --color-ivory-200: #EDE4DC;
+  --color-ivory-300: #DFD3C7;
+
+  --color-sage: #DCE8E2;
+  --color-sage-50: #F3F7F5;
+  --color-sage-100: #DCE8E2;
+  --color-sage-200: #BFD4CA;
+  --color-sage-400: #8EAFA0;
+  --color-sage-600: #597B6B;
+  --color-sage-800: #395246;
+
+  --color-rose: #E9D8DE;
+  --color-rose-50: #F8F2F5;
+  --color-rose-100: #E9D8DE;
+  --color-rose-200: #D7BAC5;
+  --color-rose-400: #B78498;
+  --color-rose-600: #8E546B;
+
+  --color-blue: #D8E4F0;
+  --color-blue-50: #F2F7FB;
+  --color-blue-100: #D8E4F0;
+  --color-blue-300: #A8C4DF;
+  --color-blue-600: #547B9E;
+
+  --color-taupe: #A8978A;
+  --color-taupe-100: #D8D0C9;
+  --color-taupe-300: #B7A89D;
+  --color-taupe-500: #A8978A;
+  --color-taupe-700: #736357;
+
+  --color-brown: #66564D;
+  --color-brown-light: #8A786F;
+  --color-brown-deep: #43362F;
+
+  --font-serif: "Cormorant Garamond", Georgia, serif;
+  --font-sans: "DM Sans", system-ui, sans-serif;
+  --font-script: "Great Vibes", cursive;
+}
+
+/* Custom base styles */
+html {
+  scroll-behavior: smooth;
+  background-color: #F8F3EE;
+  color: #66564D;
+  font-family: 'DM Sans', system-ui, sans-serif;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #F8F3EE;
+  color: #66564D;
+  overflow-x: hidden;
+}
+
+/* 3D Envelope helpers */
+.perspective-1000 {
+  perspective: 1000px;
+}
+.perspective-1500 {
+  perspective: 1500px;
+}
+.preserve-3d {
+  transform-style: preserve-3d;
+}
+.backface-hidden {
+  backface-visibility: hidden;
+}
+
+/* Custom subtle scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #F8F3EE;
+}
+::-webkit-scrollbar-thumb {
+  background: #D8D0C9;
+  border-radius: 9999px;
+  border: 2px solid #F8F3EE;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #A8978A;
+}
+
+/* Luxury Paper textures and grain */
+.paper-texture {
+  background-color: #F8F3EE;
+  background-image: radial-gradient(#66564D0d 1px, transparent 1px);
+  background-size: 16px 16px;
+}
+
+.linen-texture {
+  background-color: #FDFAF7;
+  background-image: 
+    linear-gradient(rgba(102, 86, 77, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(102, 86, 77, 0.02) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+/* Wax seal shadow and 3D feel */
+.wax-seal-shadow {
+  box-shadow: 
+    0 4px 6px -1px rgba(102, 86, 77, 0.15),
+    0 10px 25px -3px rgba(142, 84, 107, 0.25),
+    inset 0 2px 4px rgba(255, 255, 255, 0.4),
+    inset 0 -3px 6px rgba(90, 40, 60, 0.3);
+}
+
+.envelope-shadow {
+  box-shadow: 
+    0 25px 50px -12px rgba(102, 86, 77, 0.2),
+    0 10px 20px -5px rgba(102, 86, 77, 0.1);
+}
+
+.card-shadow {
+  box-shadow: 
+    0 20px 40px -15px rgba(102, 86, 77, 0.12),
+    0 0 0 1px rgba(168, 151, 138, 0.2);
+}
+
+/* Custom animation for floating items */
+@keyframes floatGentle {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-8px) rotate(2deg);
+  }
+}
+
+.animate-float-gentle {
+  animation: floatGentle 6s ease-in-out infinite;
+}
+
+/* Shimmer highlight for ribbon */
+@keyframes ribbonShimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
