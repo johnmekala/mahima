@@ -28,6 +28,8 @@ import {
   Save,
   Check,
   Loader2,
+  AlertTriangle,
+  Copy,
 } from 'lucide-react';
 import { useWeddingCms } from '../../context/CmsContext';
 import { ChristianCross } from '../common/FloralDecor';
@@ -145,10 +147,14 @@ export const CmsDashboard: React.FC = () => {
     exportJson,
     importJson,
     changePin,
+    cloudSyncStatus,
+    retryCloudSync,
   } = useWeddingCms();
 
   const [activeTab, setActiveTab] = useState<CmsTab>('overview');
   const [saveToast, setSaveToast] = useState<string | null>(null);
+  const [copiedRules, setCopiedRules] = useState(false);
+  const [isRetrying, setIsRetrying] = useState(false);
 
   // RSVP Search/Filter state
   const [rsvpSearch, setRsvpSearch] = useState('');
@@ -341,10 +347,24 @@ export const CmsDashboard: React.FC = () => {
             </div>
 
             <div className="flex items-center gap-3">
-              <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#EBF2EE] border border-[#BFD4CA] text-xs font-serif text-[#597B6B]">
-                <span className="h-2 w-2 rounded-full bg-[#597B6B] animate-pulse" />
-                <span>Firebase RTDB Synced</span>
-              </span>
+              {cloudSyncStatus === 'connected' && (
+                <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#EBF2EE] border border-[#BFD4CA] text-xs font-serif text-[#597B6B]" title="Changes are synced to Firebase Cloud and live on mobile and all devices">
+                  <span className="h-2 w-2 rounded-full bg-[#597B6B] animate-pulse" />
+                  <span>Cloud Synced (Live on Mobile)</span>
+                </span>
+              )}
+              {cloudSyncStatus === 'permission_denied' && (
+                <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-100 border border-amber-300 text-xs font-serif text-amber-800" title="Changes saved only on this laptop. Firebase rules are locked.">
+                  <span className="h-2 w-2 rounded-full bg-amber-600 animate-pulse" />
+                  <span>⚠️ Saved on Laptop Only (Cloud Locked)</span>
+                </span>
+              )}
+              {cloudSyncStatus === 'connecting' && (
+                <span className="hidden sm:inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 border border-blue-200 text-xs font-serif text-blue-700">
+                  <Loader2 className="h-3 w-3 animate-spin text-blue-600" />
+                  <span>Checking Cloud Sync...</span>
+                </span>
+              )}
 
               <button
                 onClick={handleExitToWebsite}
@@ -358,6 +378,66 @@ export const CmsDashboard: React.FC = () => {
 
           {/* Tab Views */}
           <div className="flex-1 p-6 sm:p-8 max-w-5xl">
+            {/* Permission Denied Warning Banner */}
+            {cloudSyncStatus === 'permission_denied' && (
+              <div className="mb-6 rounded-2xl border-2 border-amber-400 bg-amber-50 p-5 shadow-sm text-amber-950">
+                <div className="flex items-start gap-3.5">
+                  <AlertTriangle className="h-6 w-6 text-amber-600 shrink-0 mt-0.5" />
+                  <div className="flex-1 space-y-2">
+                    <h3 className="font-serif text-base font-semibold text-amber-950">
+                      Changes are currently saved ONLY on this laptop!
+                    </h3>
+                    <p className="text-xs text-amber-800 leading-relaxed">
+                      Your Firebase Realtime Database is in locked mode (<strong>Permission denied</strong>). Mobile devices and other browsers will not see your updated media and text until you allow read/write in Firebase Database Rules.
+                    </p>
+                    <div className="p-3 rounded-xl bg-amber-100/70 border border-amber-200 font-mono text-[11px] text-amber-900 overflow-x-auto select-all">
+                      {`{\n  "rules": {\n    ".read": true,\n    ".write": true\n  }\n}`}
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2 pt-1">
+                      <a
+                        href="https://console.firebase.google.com/project/wedding-25306/database/wedding-25306-default-rtdb/rules"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 rounded-full bg-amber-700 px-4 py-1.5 font-serif text-xs text-white hover:bg-amber-800 transition-colors shadow-xs"
+                      >
+                        <span>Open Firebase Rules in Console</span>
+                        <ExternalLink className="h-3 w-3" />
+                      </a>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          navigator.clipboard.writeText('{\n  "rules": {\n    ".read": true,\n    ".write": true\n  }\n}');
+                          setCopiedRules(true);
+                          triggerToast('Firebase Rules JSON copied!');
+                          setTimeout(() => setCopiedRules(false), 2500);
+                        }}
+                        className="inline-flex items-center gap-1.5 rounded-full bg-white border border-amber-300 px-3.5 py-1.5 font-serif text-xs text-amber-900 hover:bg-amber-100/50 transition-colors cursor-pointer"
+                      >
+                        {copiedRules ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5 text-amber-700" />}
+                        <span>{copiedRules ? 'Rules Copied!' : 'Copy Rules JSON'}</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          setIsRetrying(true);
+                          const ok = await retryCloudSync();
+                          setIsRetrying(false);
+                          if (ok) {
+                            triggerToast('✓ Successfully synced all updates to Firebase Cloud!');
+                          } else {
+                            triggerToast('⚠️ Still permission denied. Please publish the rules in Firebase Console first.');
+                          }
+                        }}
+                        className="inline-flex items-center gap-1.5 rounded-full bg-white border border-amber-300 px-3.5 py-1.5 font-serif text-xs text-amber-900 hover:bg-amber-100/50 transition-colors cursor-pointer"
+                      >
+                        <RotateCcw className={`h-3.5 w-3.5 text-amber-700 ${isRetrying ? 'animate-spin' : ''}`} />
+                        <span>Retry Sync to Cloud</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
             {/* 1. OVERVIEW TAB */}
             {activeTab === 'overview' && (
               <div className="space-y-8">

@@ -116,17 +116,18 @@ export function subscribeToRTDBRsvps(
 /**
  * Save site configuration (CMS data) to Firebase Realtime Database
  */
-export async function saveSiteConfigToRTDB(data: WeddingSiteData): Promise<boolean> {
+export async function saveSiteConfigToRTDB(data: WeddingSiteData): Promise<{ success: boolean; error?: string }> {
   try {
     const configRef = ref(rtdb, RTDB_CONFIG_PATH);
     await set(configRef, {
       ...data,
       lastSavedAt: new Date().toISOString(),
     });
-    return true;
-  } catch (error) {
-    console.warn('Firebase RTDB saveSiteConfig error:', error);
-    return false;
+    return { success: true };
+  } catch (error: any) {
+    const errorMsg = error?.message || String(error);
+    console.warn('Firebase RTDB saveSiteConfig error:', errorMsg);
+    return { success: false, error: errorMsg };
   }
 }
 
@@ -154,6 +155,7 @@ export function subscribeToSiteConfigRTDB(
     return unsubscribe;
   } catch (error) {
     console.warn('Firebase RTDB subscribeToSiteConfig error:', error);
+    if (onError) onError(error);
     return () => {};
   }
 }
@@ -199,15 +201,15 @@ export async function deleteRsvpFromFirebase(id: string): Promise<boolean> {
 /**
  * Combined save site config function
  */
-export async function saveSiteConfigToFirebase(data: WeddingSiteData): Promise<boolean> {
-  const rtdbSuccess = await saveSiteConfigToRTDB(data);
+export async function saveSiteConfigToFirebase(data: WeddingSiteData): Promise<{ success: boolean; error?: string }> {
+  const rtdbResult = await saveSiteConfigToRTDB(data);
   try {
     const firestoreRef = doc(db, 'wedding_config', 'main');
     await setDoc(firestoreRef, { ...data, lastSavedAt: new Date().toISOString() }, { merge: true });
   } catch {
     // Ignore
   }
-  return rtdbSuccess;
+  return rtdbResult;
 }
 
 export const subscribeToFirebaseRsvps = subscribeToRTDBRsvps;

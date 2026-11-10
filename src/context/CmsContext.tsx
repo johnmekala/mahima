@@ -106,6 +106,11 @@ interface CmsContextType {
   deleteRsvp: (id: string) => void;
   exportRsvpsCsv: () => void;
 
+  // Cloud Sync
+  cloudSyncStatus: 'connected' | 'permission_denied' | 'connecting' | 'error';
+  cloudErrorDetails: string | null;
+  retryCloudSync: () => Promise<boolean>;
+
   // System Controls
   resetToDefaults: () => void;
   exportJson: () => void;
@@ -207,12 +212,26 @@ export const CmsProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   });
   const [rsvps, setRsvps] = useState<RsvpSubmission[]>(() => getAllStoredRsvps());
 
+  const [cloudSyncStatus, setCloudSyncStatus] = useState<'connected' | 'permission_denied' | 'connecting' | 'error'>('connecting');
+  const [cloudErrorDetails, setCloudErrorDetails] = useState<string | null>(null);
+
   // Save to localStorage & Firebase whenever siteData changes
   useEffect(() => {
     try {
       localStorage.setItem(CMS_STORAGE_KEY, JSON.stringify(siteData));
       // Sync to Firebase Cloud
-      saveSiteConfigToFirebase(siteData);
+      saveSiteConfigToFirebase(siteData).then((res) => {
+        if (res.success) {
+          setCloudSyncStatus('connected');
+          setCloudErrorDetails(null);
+        } else {
+          const isPerm =
+            res.error?.toLowerCase().includes('permission') ||
+            res.error?.toLowerCase().includes('permission_denied');
+          setCloudSyncStatus(isPerm ? 'permission_denied' : 'error');
+          setCloudErrorDetails(res.error || 'Permission denied in Firebase database rules');
+        }
+      });
     } catch (e) {
       console.error('Failed to persist CMS data', e);
     }
@@ -233,17 +252,44 @@ export const CmsProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     });
 
     // 2. RTDB Site Configuration live listener
-    const unsubscribeRtdbConfig = subscribeToSiteConfigRTDB((cloudConfig) => {
-      if (cloudConfig && cloudConfig.couple) {
-        setSiteData((prev) => ({ ...prev, ...cloudConfig }));
+    const unsubscribeRtdbConfig = subscribeToSiteConfigRTDB(
+      (cloudConfig) => {
+        setCloudSyncStatus('connected');
+        setCloudErrorDetails(null);
+        if (cloudConfig && cloudConfig.couple) {
+          setSiteData((prev) => ({ ...prev, ...cloudConfig }));
+        }
+      },
+      (err: any) => {
+        const msg = err?.message || String(err);
+        const isPerm = msg.toLowerCase().includes('permission');
+        setCloudSyncStatus(isPerm ? 'permission_denied' : 'error');
+        setCloudErrorDetails(msg);
       }
-    });
+    );
 
     return () => {
       unsubscribeRtdbRsvps();
       unsubscribeRtdbConfig();
     };
   }, []);
+
+  const retryCloudSync = async (): Promise<boolean> => {
+    setCloudSyncStatus('connecting');
+    const res = await saveSiteConfigToFirebase(siteData);
+    if (res.success) {
+      setCloudSyncStatus('connected');
+      setCloudErrorDetails(null);
+      return true;
+    } else {
+      const isPerm =
+        res.error?.toLowerCase().includes('permission') ||
+        res.error?.toLowerCase().includes('permission_denied');
+      setCloudSyncStatus(isPerm ? 'permission_denied' : 'error');
+      setCloudErrorDetails(res.error || 'Permission denied in Firebase database rules');
+      return false;
+    }
+  };
 
   // Auth methods
   const login = (pin: string): boolean => {
@@ -388,7 +434,18 @@ export const CmsProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     try {
       localStorage.setItem(CMS_STORAGE_KEY, JSON.stringify(siteData));
       const res = await saveSiteConfigToFirebase(siteData);
-      return res;
+      if (res.success) {
+        setCloudSyncStatus('connected');
+        setCloudErrorDetails(null);
+        return true;
+      } else {
+        const isPerm =
+          res.error?.toLowerCase().includes('permission') ||
+          res.error?.toLowerCase().includes('permission_denied');
+        setCloudSyncStatus(isPerm ? 'permission_denied' : 'error');
+        setCloudErrorDetails(res.error || 'Permission denied in Firebase database rules');
+        return false;
+      }
     } catch (e) {
       console.error('Failed to manually save site config:', e);
       return false;
@@ -653,6 +710,9 @@ export const CmsProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         refreshRsvps,
         deleteRsvp,
         exportRsvpsCsv,
+        cloudSyncStatus,
+        cloudErrorDetails,
+        retryCloudSync,
         resetToDefaults,
         exportJson,
         importJson,
