@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 import type {
   CoupleInfo,
@@ -33,6 +33,7 @@ import {
   saveSiteConfigToFirebase,
   subscribeToRTDBRsvps,
   subscribeToSiteConfigRTDB,
+  fetchSiteConfigDirect,
   deleteRsvpFromFirebase,
 } from '../services/firebase';
 
@@ -119,6 +120,99 @@ interface CmsContextType {
 
 const CmsContext = createContext<CmsContextType | null>(null);
 
+/**
+ * Deep merges cloud or local partial data into full site state safely
+ */
+export const mergeSiteData = (base: WeddingSiteData, incoming: Partial<WeddingSiteData>): WeddingSiteData => {
+  if (!incoming) return base;
+  return {
+    ...base,
+    ...incoming,
+    couple: {
+      ...base.couple,
+      ...(incoming.couple || {}),
+      bridePhotoUrl: incoming.couple?.bridePhotoUrl || base.couple?.bridePhotoUrl,
+      groomPhotoUrl: incoming.couple?.groomPhotoUrl || base.couple?.groomPhotoUrl,
+      brideFullName: incoming.couple?.brideFullName || base.couple?.brideFullName,
+      groomFullName: incoming.couple?.groomFullName || base.couple?.groomFullName,
+      brideParents: incoming.couple?.brideParents || base.couple?.brideParents,
+      groomParents: incoming.couple?.groomParents || base.couple?.groomParents,
+      locationCity: incoming.couple?.locationCity || base.couple?.locationCity,
+      weddingDateFormatted: incoming.couple?.weddingDateFormatted || base.couple?.weddingDateFormatted,
+    },
+    envelope: {
+      ...base.envelope,
+      ...(incoming.envelope || {}),
+    },
+    hero: {
+      ...base.hero,
+      ...(incoming.hero || {}),
+      backgroundUrl: incoming.hero?.backgroundUrl || base.hero?.backgroundUrl,
+      overlayOpacity:
+        typeof incoming.hero?.overlayOpacity === 'number'
+          ? incoming.hero.overlayOpacity
+          : base.hero?.overlayOpacity ?? 35,
+    },
+    blessings: {
+      ...base.blessings,
+      ...(incoming.blessings || {}),
+    },
+    countdown: {
+      ...base.countdown,
+      ...(incoming.countdown || {}),
+    },
+    storySettings: {
+      ...base.storySettings,
+      ...(incoming.storySettings || {}),
+    },
+    eventsSettings: {
+      ...base.eventsSettings,
+      ...(incoming.eventsSettings || {}),
+    },
+    gallerySettings: {
+      ...base.gallerySettings,
+      ...(incoming.gallerySettings || {}),
+    },
+    familySettings: {
+      ...base.familySettings,
+      ...(incoming.familySettings || {}),
+    },
+    warmRegards: {
+      ...base.warmRegards,
+      ...(incoming.warmRegards || {}),
+    },
+    reelsSettings: {
+      ...base.reelsSettings,
+      ...(incoming.reelsSettings || {}),
+    },
+    rsvpSettings: {
+      ...base.rsvpSettings,
+      ...(incoming.rsvpSettings || {}),
+    },
+    locations: {
+      ...base.locations,
+      ...(incoming.locations || {}),
+    },
+    final: {
+      ...base.final,
+      ...(incoming.final || {}),
+    },
+    social: {
+      ...base.social,
+      ...(incoming.social || {}),
+    },
+    music: {
+      ...base.music,
+      ...(incoming.music || {}),
+    },
+    events: incoming.events && incoming.events.length > 0 ? incoming.events : base.events,
+    gallery: incoming.gallery && incoming.gallery.length > 0 ? incoming.gallery : base.gallery,
+    story: incoming.story && incoming.story.length > 0 ? incoming.story : base.story,
+    family: incoming.family && incoming.family.length > 0 ? incoming.family : base.family,
+    reels: incoming.reels && incoming.reels.length > 0 ? incoming.reels : base.reels,
+  };
+};
+
 export const CmsProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   // Load site data from localStorage or default
   const [siteData, setSiteData] = useState<WeddingSiteData>(() => {
@@ -126,72 +220,7 @@ export const CmsProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       const stored = localStorage.getItem(CMS_STORAGE_KEY);
       if (stored) {
         const parsed = JSON.parse(stored);
-        const storedEvents: WeddingEvent[] = parsed.events || [];
-        const mergedEvents = [...storedEvents];
-        defaultWeddingData.events.forEach((defEv) => {
-          const exists = mergedEvents.some(
-            (e) =>
-              e.id === defEv.id ||
-              e.title.toLowerCase().includes(defEv.id) ||
-              (defEv.id === 'haldi' && e.title.toLowerCase().includes('haldi'))
-          );
-          if (!exists) {
-            mergedEvents.push(defEv);
-          }
-        });
-        return {
-          ...defaultWeddingData,
-          ...parsed,
-          couple: {
-            ...defaultWeddingData.couple,
-            ...(parsed.couple || {}),
-            brideFullName:
-              !parsed.couple?.brideFullName || parsed.couple.brideFullName === 'Sunitha Grace'
-                ? defaultWeddingData.couple.brideFullName
-                : parsed.couple.brideFullName,
-            groomFullName:
-              !parsed.couple?.groomFullName || parsed.couple.groomFullName === 'Prasad Matthew'
-                ? defaultWeddingData.couple.groomFullName
-                : parsed.couple.groomFullName,
-            brideQualification:
-              parsed.couple?.brideQualification !== undefined
-                ? parsed.couple.brideQualification
-                : defaultWeddingData.couple.brideQualification,
-            brideParents:
-              parsed.couple?.brideParents !== undefined
-                ? parsed.couple.brideParents
-                : defaultWeddingData.couple.brideParents,
-            groomQualification:
-              parsed.couple?.groomQualification !== undefined
-                ? parsed.couple.groomQualification
-                : defaultWeddingData.couple.groomQualification,
-            groomParents:
-              parsed.couple?.groomParents !== undefined
-                ? parsed.couple.groomParents
-                : defaultWeddingData.couple.groomParents,
-            brideVerse:
-              parsed.couple?.brideVerse !== undefined
-                ? parsed.couple.brideVerse
-                : defaultWeddingData.couple.brideVerse,
-            groomVerse:
-              parsed.couple?.groomVerse !== undefined
-                ? parsed.couple.groomVerse
-                : defaultWeddingData.couple.groomVerse,
-          },
-          hero: {
-            ...defaultWeddingData.hero,
-            ...(parsed.hero || {}),
-            overlayOpacity:
-              typeof parsed.hero?.overlayOpacity === 'number'
-                ? parsed.hero.overlayOpacity
-                : defaultWeddingData.hero.overlayOpacity ?? 35,
-          },
-          warmRegards: {
-            ...defaultWeddingData.warmRegards,
-            ...(parsed.warmRegards || {}),
-          },
-          events: mergedEvents.length > 0 ? mergedEvents : defaultWeddingData.events,
-        };
+        return mergeSiteData(defaultWeddingData, parsed);
       }
     } catch (e) {
       console.error('Failed to load CMS data from localStorage', e);
@@ -215,11 +244,20 @@ export const CmsProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [cloudSyncStatus, setCloudSyncStatus] = useState<'connected' | 'permission_denied' | 'connecting' | 'error'>('connecting');
   const [cloudErrorDetails, setCloudErrorDetails] = useState<string | null>(null);
 
-  // Save to localStorage & Firebase whenever siteData changes
+  // Track if active modifications have been made by the admin in this session
+  const hasUserEditedRef = useRef<boolean>(false);
+
+  // Sync to local storage on any change; sync to Firebase Cloud ONLY when admin makes edits!
   useEffect(() => {
     try {
       localStorage.setItem(CMS_STORAGE_KEY, JSON.stringify(siteData));
-      // Sync to Firebase Cloud
+    } catch (e) {
+      console.warn('LocalStorage save failed:', e);
+    }
+
+    // CRITICAL: Only push to Firebase if admin is logged in AND has made active edits!
+    // Regular visitors (new browsers, mobile devices) MUST NEVER overwrite Firebase with default data!
+    if (isAdminLoggedIn && hasUserEditedRef.current) {
       saveSiteConfigToFirebase(siteData).then((res) => {
         if (res.success) {
           setCloudSyncStatus('connected');
@@ -232,35 +270,52 @@ export const CmsProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           setCloudErrorDetails(res.error || 'Permission denied in Firebase database rules');
         }
       });
-    } catch (e) {
-      console.error('Failed to persist CMS data', e);
     }
-  }, [siteData]);
+  }, [siteData, isAdminLoggedIn]);
 
-  // Subscribe to real-time Firebase RTDB cloud updates
+  // Load and listen to Firebase RTDB Cloud Data
   useEffect(() => {
-    // 1. RTDB RSVP live listener
-    const unsubscribeRtdbRsvps = subscribeToRTDBRsvps((cloudRsvps) => {
-      if (cloudRsvps && cloudRsvps.length > 0) {
-        setRsvps(cloudRsvps);
-        try {
-          localStorage.setItem('wedding_all_rsvps_sunitha_prasad', JSON.stringify(cloudRsvps));
-        } catch {
-          // ignore
-        }
-      }
-    });
+    let isCancelled = false;
 
-    // 2. RTDB Site Configuration live listener
+    // 1. Direct REST fetch: executes immediately on page load in any browser/mobile network
+    const fetchDirect = async () => {
+      try {
+        const directData = await fetchSiteConfigDirect();
+        if (directData && directData.couple && !isCancelled) {
+          setSiteData((prev) => {
+            const merged = mergeSiteData(prev, directData);
+            try {
+              localStorage.setItem(CMS_STORAGE_KEY, JSON.stringify(merged));
+            } catch {}
+            return merged;
+          });
+          setCloudSyncStatus('connected');
+          setCloudErrorDetails(null);
+        }
+      } catch (err) {
+        console.warn('Direct RTDB fetch warning:', err);
+      }
+    };
+    fetchDirect();
+
+    // 2. Realtime WebSocket listener: streams live updates when edits are made in CMS
     const unsubscribeRtdbConfig = subscribeToSiteConfigRTDB(
       (cloudConfig) => {
+        if (isCancelled) return;
         setCloudSyncStatus('connected');
         setCloudErrorDetails(null);
         if (cloudConfig && cloudConfig.couple) {
-          setSiteData((prev) => ({ ...prev, ...cloudConfig }));
+          setSiteData((prev) => {
+            const merged = mergeSiteData(prev, cloudConfig);
+            try {
+              localStorage.setItem(CMS_STORAGE_KEY, JSON.stringify(merged));
+            } catch {}
+            return merged;
+          });
         }
       },
       (err: any) => {
+        if (isCancelled) return;
         const msg = err?.message || String(err);
         const isPerm = msg.toLowerCase().includes('permission');
         setCloudSyncStatus(isPerm ? 'permission_denied' : 'error');
@@ -268,9 +323,21 @@ export const CmsProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       }
     );
 
+    // 3. RTDB RSVP live listener
+    const unsubscribeRtdbRsvps = subscribeToRTDBRsvps((cloudRsvps) => {
+      if (isCancelled) return;
+      if (cloudRsvps && cloudRsvps.length > 0) {
+        setRsvps(cloudRsvps);
+        try {
+          localStorage.setItem('wedding_all_rsvps_sunitha_prasad', JSON.stringify(cloudRsvps));
+        } catch {}
+      }
+    });
+
     return () => {
-      unsubscribeRtdbRsvps();
+      isCancelled = true;
       unsubscribeRtdbConfig();
+      unsubscribeRtdbRsvps();
     };
   }, []);
 
@@ -432,6 +499,7 @@ export const CmsProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const saveSiteData = async (): Promise<boolean> => {
     try {
+      hasUserEditedRef.current = true;
       localStorage.setItem(CMS_STORAGE_KEY, JSON.stringify(siteData));
       const res = await saveSiteConfigToFirebase(siteData);
       if (res.success) {

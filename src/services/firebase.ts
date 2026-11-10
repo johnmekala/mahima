@@ -39,6 +39,7 @@ export const db = getFirestore(app);
 // Paths & Keys
 const RTDB_RSVPS_PATH = 'rsvps';
 const RTDB_CONFIG_PATH = 'wedding_config';
+export const RTDB_CONFIG_REST_URL = 'https://wedding-25306-default-rtdb.firebaseio.com/wedding_config.json';
 
 /**
  * -------------------------------------------------------------
@@ -114,21 +115,68 @@ export function subscribeToRTDBRsvps(
 }
 
 /**
+ * Direct HTTPS REST fetch for instantaneous CMS config loading across all devices & mobile networks
+ */
+export async function fetchSiteConfigDirect(): Promise<WeddingSiteData | null> {
+  try {
+    const res = await fetch(`${RTDB_CONFIG_REST_URL}?t=${Date.now()}`, {
+      cache: 'no-store',
+      headers: { Accept: 'application/json' },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data && data.couple ? (data as WeddingSiteData) : null;
+  } catch (e) {
+    console.warn('Direct RTDB fetch warning:', e);
+    return null;
+  }
+}
+
+/**
  * Save site configuration (CMS data) to Firebase Realtime Database
+ * Dual-syncs via Direct REST PUT (100% reliable) and Firebase SDK set (live WebSocket broadcast)
  */
 export async function saveSiteConfigToRTDB(data: WeddingSiteData): Promise<{ success: boolean; error?: string }> {
+  const payload = {
+    ...data,
+    lastSavedAt: new Date().toISOString(),
+  };
+
+  let rtdbSuccess = false;
+  let rtdbError = '';
+
+  // 1. Direct REST PUT (instant reliable update directly to cloud RTDB)
+  try {
+    const res = await fetch(RTDB_CONFIG_REST_URL, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    if (res.ok) {
+      rtdbSuccess = true;
+    } else {
+      const errText = await res.text();
+      rtdbError = errText;
+    }
+  } catch (e: any) {
+    rtdbError = e?.message || String(e);
+  }
+
+  // 2. Firebase SDK set (notifies active WebSocket clients immediately)
   try {
     const configRef = ref(rtdb, RTDB_CONFIG_PATH);
-    await set(configRef, {
-      ...data,
-      lastSavedAt: new Date().toISOString(),
-    });
-    return { success: true };
+    await set(configRef, payload);
+    rtdbSuccess = true;
   } catch (error: any) {
-    const errorMsg = error?.message || String(error);
-    console.warn('Firebase RTDB saveSiteConfig error:', errorMsg);
-    return { success: false, error: errorMsg };
+    if (!rtdbSuccess) {
+      rtdbError = error?.message || String(error);
+    }
   }
+
+  if (rtdbSuccess) {
+    return { success: true };
+  }
+  return { success: false, error: rtdbError };
 }
 
 /**
